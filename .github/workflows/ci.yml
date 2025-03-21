@@ -12,17 +12,69 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        node-version: [14, 16, 18] # Matrix build for multiple Node.js versions
+
     steps:
+      # Checkout the code
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # Set up Node.js with matrix versions
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '16'
+          node-version: ${{ matrix.node-version }}
 
+      # Cache dependencies
+      - name: Cache Node.js modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ matrix.node-version }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.node-version }}-
+
+      # Install dependencies
       - name: Install dependencies
         run: npm install
 
-      - name: Run script
+      # Run tests
+      - name: Run tests
+        run: npm test
+
+      # Run a custom script
+      - name: Run demo script
         run: npm run demo
+
+      # Upload test results as an artifact
+      - name: Upload test results
+        if: always() # Always upload even if the job fails
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: ./test-results/
+
+      # Sync with S3 (example of using secrets)
+      - name: Sync with S3
+        if: github.event_name == 'push' # Only run on push events
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'us-east-1'
+        run: |
+          aws s3 sync ./build s3://your-s3-bucket-name --delete
+
+  deploy:
+    needs: build # Run only after the build job
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Deploy to production (example placeholder)
+      - name: Deploy to production
+        run: echo "Deploying to production..."
